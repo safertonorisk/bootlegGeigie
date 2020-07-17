@@ -8,12 +8,6 @@
 #include <SimpleTimer.h>
 #include <ArduinoQueue.h>
 
-#define LOGO16_GLCD_HEIGHT 16 
-#define LOGO16_GLCD_WIDTH  16 
-#define NUMFLAKES 10
-#define XPOS 0
-#define YPOS 1
-#define DELTAY 2
 #define OLED_RESET -1
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 32 // OLED display height, in pixels
@@ -31,16 +25,22 @@ File logFile;
 SimpleTimer timerCount;
 ArduinoQueue<unsigned long> minuteBuffer(13);
 
-void gpsdump(TinyGPS &gps);
-void printFloat(double f, int digits);
+static void smartdelay(unsigned long ms);
+float print_float(float val, float invalid, int len, int prec);
+int print_int(unsigned long val, unsigned long invalid, int len);
+String print_date(TinyGPS &gps);
+static void print_str(const char *str, int len);
 
 long counts=0;
 long inMinute = 0;
 long inFiveSecs = 0;
 long allCounts = 0;
-String satNum,utcTime,utcDate,lat,lon,alt,hdop,valid, sdStat="Warm^";
+String sdStat="Warm^",utcDate="",date="",valid="";
 boolean isFirst=true;
 
+int satNum;
+float flat,flon,falt,hdop;
+unsigned long age;
 //--------------------- MAIN FUNCTIONS --------------------//
   #if (SSD1306_LCDHEIGHT != 32) // 
   #error("Height incorrect, please fix Adafruit_SSD1306.h!");
@@ -48,7 +48,7 @@ boolean isFirst=true;
   
 void setup() {
   // put your setup code here, to run once:
-  Serial.begin(9600); 
+  Serial.begin(115200); 
   GPSMod.begin(9600);
   delay(3000);
   //pinMode(1, OUTPUT);
@@ -80,62 +80,42 @@ void count5sec(){
   allCounts += counts;
   minuteBuffer.enqueue(counts);
   counts = 0; 
-  Serial.println(inMinute);
   if(minuteBuffer.isFull()){
     inMinute -= minuteBuffer.dequeue();    
-    String readString = "";
-    boolean gga = false,rmc = false;
-    long prevTime=millis();
-    while (GPSMod.available()&&!gga||!rmc&&millis()-prevTime>4000) {
-      
-        /*char c = GPSMod.read();  //gets one byte from serial buffer
-        readString += c; //makes the string readString*/
-        readString = GPSMod.readStringUntil('\r');Serial.println(readString);
-        int readLen = readString.length();
-        if(readString.indexOf("GPRMC")>0&&readString.indexOf("⸮")<0){
-          rmc=true;
-          //Serial.println(readString);
-          utcDate = "";
-          for(int i=0, arrind = 0;i<readLen;i++){
-            if(readString[i]==',') {arrind++;}
-            else{
-              switch(arrind){
-                case 9: 
-                    utcDate+=readString[i]; break;
-                case 10:
-                    i=readLen;break;
-              }
-            }
-          }
-        }
-        else if(readString.indexOf("GPGGA")>0&&readString.indexOf("⸮")<0){
-          //Serial.println(readString);
-          gga=true;satNum = ""; utcTime = "";  lat = ""; lon = ""; alt = ""; hdop = ""; valid = ""; 
-          for(int i=0, arrind = 0;i<readLen;i++){
-            if(readString[i]==',') {arrind++;}
-            else{
-              switch(arrind){
-                case 1: utcTime+=readString[i];break;
-                case 2: lat+=readString[i];break;
-                case 3: lat+=(","+(String)readString[i]);break;
-                case 4: lon+=readString[i];break;
-                case 5: lon+=(','+(String)readString[i]);break;
-                case 6: valid = (readString[i]=='1')? "A": "V";break;
-                case 7: satNum += readString[i];break;
-                case 8: hdop += readString[i];break;
-                case 9: alt += readString[i];break;
-                case 10: i = readLen;break;
-              }
-            }
-          }
-        }
+
+    smartdelay(1000);
+
+    gps.f_get_position(&flat, &flon, &age);
+    falt = gps.f_altitude();
+    satNum = gps.satellites(), 
+    hdop = gps.hdop()/100;
+    date = print_date(gps);
+    utcDate = date;
+    
+    valid = (satNum>=6&&satNum!=TinyGPS::GPS_INVALID_SATELLITES) ? "A":"V";
+    char latHem;
+    if(flat<0) {
+      flat*=-1;
+      latHem = 'S';
     }
-    if(utcTime!=""&&utcDate!=""&&lat!=""&&lon!=""&&alt!=""&&hdop!=""&&valid=="V"||valid!=""&&satNum!="00"||satNum!=""||satNum!="0"){
+    else{latHem = 'N';}
+      
+    char lonHem;
+    if(flon<0) {
+      flon*=-1;
+      lonHem = 'W';
+    }
+    else{lonHem = 'E';}
+        
+    if(age<=5000ul){
       ISOfy();
-      String lineOut = "$BNRDD,1326,"+ utcDate +"T" + utcTime+ "Z," + inMinute + "," + inFiveSecs + "," + allCounts + ",A," + lat +"," +lon+","+alt+","+valid+","+satNum+","+hdop+"*";
+      String lineOut = "$BNRDD,1326,"+ date + "," + inMinute + "," + inFiveSecs + "," + allCounts + ",A," + String(flat,4) +"," + latHem +"," +String(flon,4)+","+lonHem +","+String(falt,1)+","+valid+","+String(satNum)+","+String(hdop,2)+"*";
       lineOut+=getCheckSum(lineOut);
       writeSD(lineOut);
-      Serial.println(lineOut);
+      //Serial.println(lineOut);
+    }
+    else{
+      isFirst=true;
     }
   }
       freeRam ();
@@ -144,8 +124,7 @@ void count5sec(){
   
 }
 void ISOfy(){
-  utcDate = "20"+utcDate.substring(4,6)+"-"+utcDate.substring(2,4)+"-"+utcDate.substring(0,2);
-  utcTime = utcTime.substring(0,2)+":"+utcTime.substring(2,4)+":"+utcTime.substring(4,6);
+  utcDate = utcDate.substring(5,7)+utcDate.substring(8,10);
 }
 String getCheckSum(String inp){
         String out="";
@@ -159,7 +138,9 @@ String getCheckSum(String inp){
     }
 void writeSD(String GeigieFormat){
   if(SD.begin(15)){
-    if(logFile = SD.open("1326"+utcDate.substring(5,7)+utcDate.substring(8,10)+".log", FILE_WRITE)){
+    String filename="1326"+utcDate+".log";
+    Serial.println(filename);
+    if(logFile = SD.open(filename, FILE_WRITE)){
       if(isFirst){
         logFile.println("# NEW LOG");
         logFile.println("# format=1.3.6nano");
@@ -209,11 +190,56 @@ void displayVals(){
   }
   display.print(sdStat);
   
-  int sats = satNum.toInt();
-  for(int i=0;i<7-String(inMinute).length()-String(sats).length();i++){
+  for(int i=0;i<7-String(inMinute).length()-String(satNum).length();i++){
     display.print(" ");
   }
-  display.print(sats);
+  display.print(satNum);
   display.println("^");
   display.display();
+}
+
+//--------------
+
+static void smartdelay(unsigned long ms)
+{
+  unsigned long start = millis();
+  do 
+  {
+    while (GPSMod.available())
+      gps.encode(GPSMod.read());
+  } while (millis() - start < ms);
+}
+
+String print_date(TinyGPS &gps)
+{
+  int year;
+  byte month, day, hour, minute, second, hundredths;
+  unsigned long age;
+  gps.crack_datetime(&year, &month, &day, &hour, &minute, &second, &hundredths, &age);
+  if (age == TinyGPS::GPS_INVALID_AGE)
+    Serial.print("");
+  else
+  {
+    char sz[32];
+    sprintf(sz, "%02d-%02d-%02dT%02d:%02d:%02dZ",
+        year, month, day, hour, minute, second);
+    return sz;
+  }
+  print_int(age, TinyGPS::GPS_INVALID_AGE, 5);
+  smartdelay(0);
+}
+int print_int(unsigned long val, unsigned long invalid, int len)
+{
+  char sz[32];
+  if (val == invalid)
+    strcpy(sz, "*******");
+  else
+    sprintf(sz, "%ld", val);
+  sz[len] = 0;
+  for (int i=strlen(sz); i<len; ++i)
+    sz[i] = ' ';
+  if (len > 0) 
+    sz[len-1] = ' ';
+  Serial.print(sz);
+  smartdelay(0);
 }
