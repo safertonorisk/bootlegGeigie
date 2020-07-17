@@ -27,24 +27,24 @@
 
 <h3>Directions for Use</h3>
 <ol>
-  <h2>Charging Method 1</h2>
+  <h4>Charging Method 1</h4>
   <ul>
     <li>Use a microUSB cord and wall socket adapter rated 5V;</li>
     <li>Plug the microUSB cord to the charger module on top of the device; and</li>
     <li>Wait until the indicator lights up all four LEDs without blinking</li>
   </ul>
-  <h2>Charging Method 2</h2>
+  <h4>Charging Method 2</h4>
   <ul>
     <li>Pull the battery out of its holder</li>
     <li>Charge the battery in a 3.7V battery charger</li>
     <li>Wait until the 3.7V indicates the battery is full</li>
   </ul>
-  <h2>Radiation Reading</h2>
+  <h4>Radiation Reading</h4>
   <ul>
     <li>Switch the toggle switch in the right-top side of the device</li>
     <li>When detecting an object’s radiation wait until 1 minute</li>
   </ul>
-  <h2>Data-logging</h2>
+  <h4>Data-logging</h4>
   <ul>
     <li>Switch the GPS button on the bottom of the device</li>
     <li>The device will only record if there is a GPS fixed onto it</li>
