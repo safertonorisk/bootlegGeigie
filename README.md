@@ -1,5 +1,11 @@
 # bootlegGeigie
 
+Why did I make this?
+
+First of all, the original bGeigie Nano features several components that are costly in local context wherein an Adafruit GPS Module costs 5 times the NEO6M Module. Along with the Arduino Fio which is difficult to source and 5 times the cost of a Wemos D1 Mini, and the OpenLog costs knda greater than and Arduino SD Card adapter.
+
+Also, the fact that I tripped near a rocky shore, and the bGeigie Nano was open, drowned all the electronics except for the open-geiger high voltage module and LND7317. I tried to make use of locally sourced components which are cheap, small enough and functional as well to replace all the bGeigie Nano functions.
+
 <h3>Specifications</h3>
 <ul>
   <li>LND7317 Pancake Geiger</li>
